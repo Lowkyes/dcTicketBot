@@ -10,6 +10,12 @@ const {
 } = require("discord.js");
 require("dotenv").config();
 
+setInterval(() => {
+  require("node-fetch")(
+    "https://0dbe80b1-e2cc-45e8-8c26-4f0626be9e71-00-bws1c45gbkms.sisko.replit.dev/"
+  );
+}, 4 * 60 * 1000); // every 4 minutes
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -47,7 +53,7 @@ const pets = [
     id: 4,
     name: "Mimic",
     description:
-      "Mimicry: Every ~20m, it mimics and copies an ability from another pet (in player garden) and performs its ability! But if a Mimic Octopus copies a pet with two abilities, it will only perform the first ability. The copied pet's cooldown isn't affected.",
+      "Mimicry: Every ~20m, it mimics and copies an ability from another pet (in player garden) and performs its ability!",
     price: 3.5,
     image: "https://growagardenpro.com/pets/mimicoctopus.webp",
   },
@@ -57,9 +63,8 @@ const QR_IMAGE =
   "https://cdn.discordapp.com/attachments/1401451024501313656/1401563828713426976/image.png";
 const WALLET_ADDRESS = "LXDvc4mnnxepL3JvMin2EHhTfG4mUH5WCG";
 const cryptoUnitPrice = 1;
-const WEBHOOK_URL = "https://discord.com/api/webhooks/1401414474757312543/cdN6rnWZVw2FUuunLRxdOLDwXSgaDV2re0s9PtCIAF2g-lLs5qMF9YCtclJDps3hN_u_";
 
-const userCarts = {}; // temporary cart storage
+const userCarts = {};
 
 client.once("ready", () => {
   console.log(`✅ Bot is online as ${client.user.tag}`);
@@ -72,11 +77,19 @@ client.on("interactionCreate", async (interaction) => {
 
   if (action === "create_ticket") {
     const ticketChannel = await interaction.guild.channels.create({
-      name: `ticket-${interaction.user.username}-${Math.floor(Math.random() * 10000)}`,
+      name: `ticket-${interaction.user.username}-${Math.floor(
+        Math.random() * 10000
+      )}`,
       type: 0,
       permissionOverwrites: [
-        { id: interaction.guild.id, deny: ["ViewChannel"] },
-        { id: interaction.user.id, allow: ["ViewChannel", "SendMessages"] },
+        {
+          id: interaction.guild.id,
+          deny: ["ViewChannel"],
+        },
+        {
+          id: interaction.user.id,
+          allow: ["ViewChannel", "SendMessages"],
+        },
       ],
     });
 
@@ -85,7 +98,7 @@ client.on("interactionCreate", async (interaction) => {
     await ticketChannel.send({
       content: `<@${interaction.user.id}>`,
       embeds: [getPetsListEmbed()],
-      components: [getPetsButtons(userId)],
+      components: [getPetsButtons(interaction.user.id)], // ✅ Fix here
     });
 
     await interaction.reply({
@@ -94,26 +107,85 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  if (action === "pay") {
+  if (action === "view") {
+    const pet = pets.find((p) => p.id === parseInt(itemId));
+    if (!pet) return;
+
+    const embed = new EmbedBuilder()
+      .setTitle(pet.name)
+      .setDescription(`${pet.description}\n**Price:** $${pet.price}`)
+      .setImage(pet.image);
+
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId(`crypto-${userId}`)
-        .setLabel("Pay with Crypto")
+        .setCustomId(`add-${userId}-${pet.id}`)
+        .setLabel("➕ Add to Cart")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`back-${userId}`)
+        .setLabel("⬅ Back to List")
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    await interaction.update({ embeds: [embed], components: [row] });
+  }
+
+  if (action === "add") {
+    const pet = pets.find((p) => p.id === parseInt(itemId));
+    if (!pet) return;
+
+    if (!userCarts[userId]) userCarts[userId] = [];
+    userCarts[userId].push(pet);
+
+    await interaction.reply({
+      content: `✅ **${pet.name}** added to your cart!`,
+      ephemeral: true,
+    });
+  }
+
+  if (action === "back") {
+    await interaction.update({
+      embeds: [getPetsListEmbed()],
+      components: [getPetsButtons(userId)],
+    });
+  }
+
+  if (action === "cart") {
+    const cart = userCarts[userId];
+    if (!cart || cart.length === 0) {
+      await interaction.reply({
+        content: "🛒 Your cart is empty.",
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const total = cart.reduce((sum, p) => sum + p.price, 0);
+    const desc = cart.map((p) => `• ${p.name} — $${p.price}`).join("\n");
+
+    const embed = new EmbedBuilder()
+      .setTitle("🛒 Your Cart")
+      .setDescription(`${desc}\n\n**Total: $${total}**`);
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`pay-${userId}`)
+        .setLabel("💳 Proceed to Payment")
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
-        .setCustomId(`gcash-${userId}`)
-        .setLabel("Pay with GCash")
+        .setCustomId(`back-${userId}`)
+        .setLabel("⬅ Back")
         .setStyle(ButtonStyle.Secondary)
     );
 
     await interaction.reply({
-      content: "Choose your payment method:",
+      embeds: [embed],
       components: [row],
       ephemeral: true,
     });
   }
 
-  if (action === "crypto" || action === "gcash") {
+  if (action === "pay") {
     const cart = userCarts[userId];
     const total = cart.reduce((sum, p) => sum + p.price, 0);
     const cryptoAmount = (total / cryptoUnitPrice).toFixed(2);
@@ -121,11 +193,7 @@ client.on("interactionCreate", async (interaction) => {
     const embed = new EmbedBuilder()
       .setTitle("💸 Payment Info")
       .setDescription(
-        action === "crypto"
-          ? `Send **${cryptoAmount} USDT** to:
-\`${WALLET_ADDRESS}\`
-Then upload a screenshot as proof.`
-          : "Send the correct amount to GCash number: `09XXXXXXXXX`\nThen upload a screenshot as proof."
+        `Send **${cryptoAmount} USDT** to:\n\`${WALLET_ADDRESS}\`\n\nThen upload a screenshot as proof.`
       )
       .setImage(QR_IMAGE)
       .setColor("Green");
@@ -133,7 +201,7 @@ Then upload a screenshot as proof.`
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`proof-${userId}`)
-        .setLabel("Upload Proof")
+        .setLabel("📤 I Paid (Upload Proof)")
         .setStyle(ButtonStyle.Success)
     );
 
@@ -143,7 +211,7 @@ Then upload a screenshot as proof.`
   if (action === "proof") {
     await interaction.reply({
       content:
-        "✅ Please upload your **proof of payment as an image or file**. An admin will be notified.",
+        "✅ Please upload your **proof of payment as an image or file**.\nAn admin will be notified once received.",
     });
   }
 
@@ -157,49 +225,15 @@ Then upload a screenshot as proof.`
 
 client.on("messageCreate", async (message) => {
   if (
-    message.channel.name.startsWith("ticket-") &&
+    message.channel.name?.startsWith("ticket-") &&
     message.attachments.size > 0
   ) {
     const adminRole = message.guild.roles.cache.find((r) =>
       r.name.toLowerCase().includes("admin")
     );
-
-    const cart = userCarts[message.author.id] || [];
-    const orderSummary = cart.map((p) => `• ${p.name} — $${p.price}`).join("\n");
-    const total = cart.reduce((sum, p) => sum + p.price, 0);
-
-    const webhookData = {
-      content: `New order from <@${message.author.id}>`,
-      embeds: [
-        {
-          title: "Order Summary",
-          description: `${orderSummary}\n\n**Total: $${total}**`,
-          color: 0x00ff00,
-        },
-      ],
-    };
-
-    require("node-fetch")(WEBHOOK_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(webhookData),
-    });
-
     await message.channel.send(
-      `📨 <@&${adminRole?.id || "admin"}>, user has submitted proof of payment.`
+      `📬 <@&${adminRole?.id || "admin"}>, user has submitted proof of payment. Please verify.`
     );
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("close-ticket")
-        .setLabel("Close Ticket")
-        .setStyle(ButtonStyle.Danger)
-    );
-
-    await message.channel.send({
-      content: "Admin, confirm order and close ticket:",
-      components: [row],
-    });
   }
 
   if (
