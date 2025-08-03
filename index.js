@@ -189,11 +189,11 @@ client.on("interactionCreate", async (interaction) => {
   if (action === "paymethod") {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId(`pay-crypto-${userId}`)
+        .setCustomId(`paycrypto-${userId}`)
         .setLabel("🪙 Pay with Crypto")
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
-        .setCustomId(`pay-gcash-${userId}`)
+        .setCustomId(`paygcash-${userId}`)
         .setLabel("📱 Pay with GCash")
         .setStyle(ButtonStyle.Secondary)
     );
@@ -205,13 +205,13 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  if (action === "pay") {
+  if (action === "paycrypto") {
     const cart = userCarts[userId];
     const total = cart.reduce((sum, p) => sum + p.price, 0);
     const cryptoAmount = (total / cryptoUnitPrice).toFixed(2);
 
     const embed = new EmbedBuilder()
-      .setTitle("💸 Payment Info")
+      .setTitle("💸 Crypto Payment Info")
       .setDescription(
         `Send **${cryptoAmount} USDT** to:\n\`${WALLET_ADDRESS}\`\n\nThen upload a screenshot as proof.`
       )
@@ -222,13 +222,17 @@ client.on("interactionCreate", async (interaction) => {
       new ButtonBuilder()
         .setCustomId(`proof-${userId}`)
         .setLabel("📤 I Paid (Upload Proof)")
-        .setStyle(ButtonStyle.Success)
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`close-${userId}`)
+        .setLabel("❌ Close Ticket")
+        .setStyle(ButtonStyle.Danger)
     );
 
     await interaction.reply({ embeds: [embed], components: [row] });
   }
 
-  if (action === "pay" && itemId === "gcash") {
+  if (action === "paygcash") {
     const cart = userCarts[userId];
     const total = cart.reduce((sum, p) => sum + p.price, 0);
     const phpTotal = (total * PHP_RATE).toFixed(2);
@@ -244,7 +248,11 @@ client.on("interactionCreate", async (interaction) => {
       new ButtonBuilder()
         .setCustomId(`proof-${userId}`)
         .setLabel("📤 I Paid (Upload Proof)")
-        .setStyle(ButtonStyle.Success)
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`close-${userId}`)
+        .setLabel("❌ Close Ticket")
+        .setStyle(ButtonStyle.Danger)
     );
 
     await interaction.reply({ embeds: [embed], components: [row] });
