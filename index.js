@@ -44,7 +44,7 @@ const {
       description: "Disco Disco: Every ~15 minutes, has a ~16% chance a nearby fruit becomes Disco!",
       price: 6.1,
       image:
-        "https://growagardenpro.com/pets/dragonfly.webp",
+        "https://growagardenpro.com/pets/discobee.webp",
     },
     {
       id: 3,
@@ -60,7 +60,7 @@ const {
       description: "Mimicry: Every ~20m, it mimics and copies an ability from another pet (in player garden) and performs its ability! But if a Mimic Octopus copies a pet with two abilities, it will only perform the first ability. The copied pet's cooldown isn't affected.",
       price: 3.5,
       image:
-        "https://growagardenpro.com/pets/dragonfly.webp",
+        "https://growagardenpro.com/pets/mimic.webp",
     },
   ];
 
