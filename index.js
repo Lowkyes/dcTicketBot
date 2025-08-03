@@ -14,7 +14,7 @@ setInterval(() => {
   require("node-fetch")(
     "https://0dbe80b1-e2cc-45e8-8c26-4f0626be9e71-00-bws1c45gbkms.sisko.replit.dev/"
   );
-}, 4 * 60 * 1000); // every 4 minutes
+}, 4 * 60 * 1000);
 
 const client = new Client({
   intents: [
@@ -63,6 +63,7 @@ const QR_IMAGE =
   "https://cdn.discordapp.com/attachments/1401451024501313656/1401563828713426976/image.png";
 const WALLET_ADDRESS = "LXDvc4mnnxepL3JvMin2EHhTfG4mUH5WCG";
 const cryptoUnitPrice = 1;
+const PHP_RATE = 58;
 
 const userCarts = {};
 
@@ -98,7 +99,7 @@ client.on("interactionCreate", async (interaction) => {
     await ticketChannel.send({
       content: `<@${interaction.user.id}>`,
       embeds: [getPetsListEmbed()],
-      components: [getPetsButtons(interaction.user.id)], // ✅ Fix here
+      components: [getPetsButtons(interaction.user.id)],
     });
 
     await interaction.reply({
@@ -169,8 +170,8 @@ client.on("interactionCreate", async (interaction) => {
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId(`pay-${userId}`)
-        .setLabel("💳 Proceed to Payment")
+        .setCustomId(`paymethod-${userId}`)
+        .setLabel("💳 Choose Payment Method")
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
         .setCustomId(`back-${userId}`)
@@ -180,6 +181,25 @@ client.on("interactionCreate", async (interaction) => {
 
     await interaction.reply({
       embeds: [embed],
+      components: [row],
+      ephemeral: true,
+    });
+  }
+
+  if (action === "paymethod") {
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`pay-crypto-${userId}`)
+        .setLabel("🪙 Pay with Crypto")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`pay-gcash-${userId}`)
+        .setLabel("📱 Pay with GCash")
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    await interaction.reply({
+      content: "Please choose your payment method:",
       components: [row],
       ephemeral: true,
     });
@@ -197,6 +217,28 @@ client.on("interactionCreate", async (interaction) => {
       )
       .setImage(QR_IMAGE)
       .setColor("Green");
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`proof-${userId}`)
+        .setLabel("📤 I Paid (Upload Proof)")
+        .setStyle(ButtonStyle.Success)
+    );
+
+    await interaction.reply({ embeds: [embed], components: [row] });
+  }
+
+  if (action === "pay" && itemId === "gcash") {
+    const cart = userCarts[userId];
+    const total = cart.reduce((sum, p) => sum + p.price, 0);
+    const phpTotal = (total * PHP_RATE).toFixed(2);
+
+    const embed = new EmbedBuilder()
+      .setTitle("📱 GCash Payment Info")
+      .setDescription(
+        `Send **₱${phpTotal} PHP** to:\n\n**Name:** N C\n**Number:** 09624252115\n\nThen upload a screenshot as proof.`
+      )
+      .setColor("Blue");
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
