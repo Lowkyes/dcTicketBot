@@ -60,7 +60,7 @@ const {
       description: "Mimicry: Every ~20m, it mimics and copies an ability from another pet (in player garden) and performs its ability! But if a Mimic Octopus copies a pet with two abilities, it will only perform the first ability. The copied pet's cooldown isn't affected.",
       price: 3.5,
       image:
-        "https://growagardenpro.com/pets/mimic.webp",
+        "https://growagardenpro.com/pets/mimicoctopus.webp",
     },
   ];
 
