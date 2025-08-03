@@ -221,7 +221,7 @@ client.on("messageCreate", async (message) => {
 function getPetsListEmbed() {
   return new EmbedBuilder().setTitle("🐾 Pet Shop").setDescription("Click any pet below to view details!");
 }
- 
+
 function getPetsButtons(userId = "temp") {
   const row = new ActionRowBuilder();
   pets.forEach((pet) =>
