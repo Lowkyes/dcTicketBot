@@ -67,22 +67,38 @@ const QR_IMAGE =
 const WALLET_ADDRESS = "LXDvc4mnnxepL3JvMin2EHhTfG4mUH5WCG";
 const cryptoUnitPrice = 1;
 const PHP_RATE = 58;
-const WEBHOOK_URL = "https://discord.com/api/webhooks/1401588463387672668/RVJjz9Livx5x3VvteDtP2mtJRx4XExeSGfK2o4JiG4MP1-YbWy1hrAaQFcqVKUUZsvZF";
+
+const WEBHOOK_URL =
+  "https://discord.com/api/webhooks/1401588463387672668/RVJjz9Livx5x3VvteDtP2mtJRx4XExeSGfK2o4JiG4MP1-YbWy1hrAaQFcqVKUUZsvZF";
 
 const userCarts = {};
-const userOrderDetails = {};
+const userOrderDetails = {}; // Store username & private server link per user
 
 client.once("ready", () => {
   console.log(`✅ Bot is online as ${client.user.tag}`);
 });
 
 client.on("interactionCreate", async (interaction) => {
+  // Modal submit for user info form
   if (interaction.isModalSubmit() && interaction.customId.startsWith("userinfo-")) {
     const userId = interaction.customId.split("-")[1];
     const username = interaction.fields.getTextInputValue("username");
     const pslink = interaction.fields.getTextInputValue("pslink");
     userOrderDetails[userId] = { username, pslink };
 
+    const confirmationEmbed = new EmbedBuilder()
+      .setTitle("📄 Order Details Submitted")
+      .setDescription(
+        `**In-game Username:** ${username}\n**Private Server Link:** ${pslink}`
+      )
+      .setColor("Yellow");
+
+    await interaction.channel.send({
+      content: `<@${userId}> submitted their information:`,
+      embeds: [confirmationEmbed],
+    });
+
+    // Prompt for payment method after user info submission
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`paycrypto-${userId}`)
@@ -125,6 +141,7 @@ client.on("interactionCreate", async (interaction) => {
     });
 
     userCarts[interaction.user.id] = [];
+    userOrderDetails[interaction.user.id] = null;
 
     await ticketChannel.send({
       content: `<@${interaction.user.id}>`,
@@ -191,66 +208,62 @@ client.on("interactionCreate", async (interaction) => {
       return;
     }
 
-    const total = cart.reduce((sum, p) => sum + p.price, 0);
-    const desc = cart.map((p) => `• ${p.name} — $${p.price}`).join("\n");
+    // Show modal form to fill username and private server link before payment
+    const modal = new ModalBuilder()
+      .setCustomId(`userinfo-${userId}`)
+      .setTitle("User Info Form");
 
-    const embed = new EmbedBuilder()
-      .setTitle("🛒 Your Cart")
-      .setDescription(`${desc}\n\n**Total: $${total}**`);
+    const usernameInput = new TextInputBuilder()
+      .setCustomId("username")
+      .setLabel("In-game Username")
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder("Enter your in-game username")
+      .setRequired(true);
 
+    const pslinkInput = new TextInputBuilder()
+      .setCustomId("pslink")
+      .setLabel("Private Server Link")
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder("Enter your private server link")
+      .setRequired(true);
+
+    const firstRow = new ActionRowBuilder().addComponents(usernameInput);
+    const secondRow = new ActionRowBuilder().addComponents(pslinkInput);
+
+    modal.addComponents(firstRow, secondRow);
+
+    await interaction.showModal(modal);
+  }
+
+  if (action === "paymethod") {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId(`paymethod-${userId}`)
-        .setLabel("💳 Choose Payment Method")
+        .setCustomId(`paycrypto-${userId}`)
+        .setLabel("🪙 Pay with Crypto")
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
-        .setCustomId(`back-${userId}`)
-        .setLabel("⬅ Back")
+        .setCustomId(`paygcash-${userId}`)
+        .setLabel("📱 Pay with GCash")
         .setStyle(ButtonStyle.Secondary)
     );
 
     await interaction.reply({
-      embeds: [embed],
+      content: "Please choose your payment method:",
       components: [row],
       ephemeral: true,
     });
   }
 
-  if (action === "paymethod") {
-    const modal = new ModalBuilder()
-      .setCustomId(`userinfo-${userId}`)
-      .setTitle("Before Checkout")
-      .addComponents(
-        new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId("username")
-            .setLabel("In-game Username")
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true)
-        ),
-        new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId("pslink")
-            .setLabel("Private Server Link")
-            .setStyle(TextInputStyle.Paragraph)
-            .setRequired(true)
-        )
-      );
-
-    await interaction.showModal(modal);
-    return;
-  }
-
-  if ((action === "paycrypto" || action === "paygcash") && !userOrderDetails[userId]) {
-    await interaction.reply({
-      content: "❗ Please fill in the username and private server link first.",
-      ephemeral: true,
-    });
-    return;
-  }
-
   if (action === "paycrypto") {
     const cart = userCarts[userId];
+    if (!cart || cart.length === 0) {
+      await interaction.reply({
+        content: "🛒 Your cart is empty.",
+        ephemeral: true,
+      });
+      return;
+    }
+
     const total = cart.reduce((sum, p) => sum + p.price, 0);
     const cryptoAmount = (total / cryptoUnitPrice).toFixed(2);
 
@@ -278,6 +291,14 @@ client.on("interactionCreate", async (interaction) => {
 
   if (action === "paygcash") {
     const cart = userCarts[userId];
+    if (!cart || cart.length === 0) {
+      await interaction.reply({
+        content: "🛒 Your cart is empty.",
+        ephemeral: true,
+      });
+      return;
+    }
+
     const total = cart.reduce((sum, p) => sum + p.price, 0);
     const phpTotal = (total * PHP_RATE).toFixed(2);
 
@@ -303,10 +324,76 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   if (action === "proof") {
+    const adminRole = interaction.guild.roles.cache.find((r) =>
+      r.name.toLowerCase().includes("admin")
+    );
+
+    const confirmRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`confirm-${userId}`)
+        .setLabel("✅ Confirm Transaction")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`reject-${userId}`)
+        .setLabel("❌ Reject Transaction")
+        .setStyle(ButtonStyle.Danger)
+    );
+
     await interaction.reply({
-      content:
-        "✅ Please upload your **proof of payment as an image or file**.\nAn admin will be notified once received.",
+      content: `✅ Please upload your **proof of payment**.\n<@&${adminRole?.id || "admin"}>, please confirm once verified below.`,
+      components: [confirmRow],
     });
+  }
+
+  if (action === "confirm" || action === "reject") {
+    const orderDetails = userOrderDetails[userId];
+    const cart = userCarts[userId];
+    if (!orderDetails || !cart) {
+      await interaction.reply({
+        content: "⚠ Order details or cart not found.",
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const total = cart.reduce((sum, p) => sum + p.price, 0);
+    const petsList = cart.map((p) => p.name).join(", ");
+
+    const status = action === "confirm" ? "✅ Transaction Confirmed" : "❌ Transaction Rejected";
+    const color = action === "confirm" ? "Green" : "Red";
+
+    const statusEmbed = new EmbedBuilder()
+      .setTitle(status)
+      .addFields(
+        { name: "Username", value: orderDetails.username },
+        { name: "Private Server", value: orderDetails.pslink },
+        { name: "Pets", value: petsList },
+        { name: "Quantity", value: `${cart.length}` },
+        { name: "Total Price", value: `$${total}` }
+      )
+      .setColor(color);
+
+    await interaction.channel.send({ embeds: [statusEmbed] });
+
+    if (action === "confirm") {
+      // Send order info to webhook
+      await require("node-fetch")(WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: `✅ **Transaction Confirmed**\n**Username:** ${orderDetails.username}\n**Private Server Link:** ${orderDetails.pslink}\n**Pets Ordered:** ${petsList}\n**Quantity:** ${cart.length}\n**Total Price:** $${total}`,
+        }),
+      });
+    }
+
+    // Clear user's cart and order details
+    userCarts[userId] = [];
+    userOrderDetails[userId] = null;
+
+    await interaction.channel.send("🛑 Ticket will close in 5 seconds...");
+    setTimeout(() => {
+      interaction.channel.delete();
+    }, 5000);
   }
 
   if (action === "close") {
@@ -322,75 +409,56 @@ client.on("messageCreate", async (message) => {
     message.channel.name?.startsWith("ticket-") &&
     message.attachments.size > 0
   ) {
+    // Auto-forward proof of payment attachment to admin for verification
     const adminRole = message.guild.roles.cache.find((r) =>
       r.name.toLowerCase().includes("admin")
     );
-
-    const userId = Object.keys(userOrderDetails).find((id) =>
-      message.channel.name.includes(id)
-    );
-    const orderDetails = userOrderDetails[userId];
-    const cart = userCarts[userId];
-
-    if (orderDetails && cart) {
-      const total = cart.reduce((sum, p) => sum + p.price, 0);
-      const petsList = cart.map((p) => p.name).join(", ");
-      const proof = message.attachments.first().url;
-
-      await require("node-fetch")(WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: `📦 **New Order**\n**Order ID:** ${message.channel.name}\n**Username:** ${orderDetails.username}\n**Private Server Link:** ${orderDetails.pslink}\n**Pets Ordered:** ${petsList}\n**Quantity:** ${cart.length}\n**Total Price:** $${total}\n**Proof:** ${proof}`,
-        }),
-      });
-    }
+    if (!adminRole) return;
 
     await message.channel.send(
-      `📬 <@&${adminRole?.id || "admin"}>, user has submitted proof of payment. Please verify.`
+      `<@&${adminRole.id}>, a proof of payment was uploaded by <@${message.author.id}>. Please confirm or reject the transaction using the buttons above.`
     );
-  }
-
-  if (
-    message.content === "!setup" &&
-    message.member.permissions.has("Administrator")
-  ) {
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`create_ticket`)
-        .setLabel("🎫 Open Ticket")
-        .setStyle(ButtonStyle.Primary)
-    );
-
-    await message.channel.send({
-      content: "**Welcome! Click below to open a ticket and buy pets 🐾**",
-      components: [row],
-    });
   }
 });
 
 function getPetsListEmbed() {
-  return new EmbedBuilder()
-    .setTitle("🐾 Pet Shop")
-    .setDescription("Click any button below to view more about the pet!");
+  const embed = new EmbedBuilder()
+    .setTitle("🐾 Available Pets")
+    .setDescription(
+      "Click the buttons below to view details and add pets to your cart."
+    )
+    .setColor("Aqua");
+
+  pets.forEach((pet) => {
+    embed.addFields({
+      name: pet.name,
+      value: `$${pet.price.toFixed(2)}`,
+      inline: true,
+    });
+  });
+
+  return embed;
 }
 
-function getPetsButtons(userId = "temp") {
+function getPetsButtons(userId) {
   const row = new ActionRowBuilder();
+
   pets.forEach((pet) => {
     row.addComponents(
       new ButtonBuilder()
         .setCustomId(`view-${userId}-${pet.id}`)
         .setLabel(pet.name)
-        .setStyle(ButtonStyle.Secondary)
+        .setStyle(ButtonStyle.Primary)
     );
   });
+
   row.addComponents(
     new ButtonBuilder()
       .setCustomId(`cart-${userId}`)
       .setLabel("🛒 View Cart")
-      .setStyle(ButtonStyle.Primary)
+      .setStyle(ButtonStyle.Secondary)
   );
+
   return row;
 }
 
