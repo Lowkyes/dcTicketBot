@@ -10,6 +10,15 @@ const {
   } = require("discord.js");
   require("dotenv").config();
 
+  setInterval(
+    () => {
+      require("node-fetch")(
+        "https://0dbe80b1-e2cc-45e8-8c26-4f0626be9e71-00-bws1c45gbkms.sisko.replit.dev/",
+      );
+    },
+    4 * 60 * 1000,
+  ); // every 4 minutes
+
   const client = new Client({
     intents: [
       GatewayIntentBits.Guilds,
@@ -24,23 +33,39 @@ const {
     {
       id: 1,
       name: "Raccoon",
-      description: "Description: magnanacow.",
-      price: 10,
+      description: "Every ~15 minutes, the Raccoon goes to another player's plot and duplicates their Crop, then gives it to the pet owner.",
+      price: 6.1,
       image:
-        "https://www.welcomewildlife.com/wp-content/uploads/2015/01/Raccoon-face.jpg",
+        "https://growagardenpro.com/pets/raccoon.webp",
     },
     {
       id: 2,
-      name: "Dragon Fly",
-      description: "old but bold.",
-      price: 10,
+      name: "Disco Bee",
+      description: "Disco Disco: Every ~15 minutes, has a ~16% chance a nearby fruit becomes Disco!",
+      price: 6.1,
       image:
-        "https://www.welcomewildlife.com/wp-content/uploads/2015/01/Raccoon-face.jpg",
+        "https://growagardenpro.com/pets/dragonfly.webp",
+    },
+    {
+      id: 3,
+      name: "Dragon Fly",
+      description: "Every ~5 minutes, turns one random fruit Gold.",
+      price: 4.5,
+      image:
+        "https://growagardenpro.com/pets/dragonfly.webp",
+    },
+    {
+      id: 4,
+      name: "Mimic",
+      description: "Mimicry: Every ~20m, it mimics and copies an ability from another pet (in player garden) and performs its ability! But if a Mimic Octopus copies a pet with two abilities, it will only perform the first ability. The copied pet's cooldown isn't affected.",
+      price: 3.5,
+      image:
+        "https://growagardenpro.com/pets/dragonfly.webp",
     },
   ];
 
-  const QR_IMAGE = "https://example.com/qr.png"; // Change to your QR code
-  const WALLET_ADDRESS = "ltc mo or btc dito";
+  const QR_IMAGE = "https://cdn.discordapp.com/attachments/1401451024501313656/1401563828713426976/image.png?ex=6890bb88&is=688f6a08&hm=4768810d06892f2b90bdd1cce7ca25425c21e3d78c9d0a297bfd1c2317b68f0c"; // Change to your QR code
+  const WALLET_ADDRESS = "LXDvc4mnnxepL3JvMin2EHhTfG4mUH5WCG";
   const cryptoUnitPrice = 1; // $1 = 1 USDT
 
   const userCarts = {}; // temporary cart storage
