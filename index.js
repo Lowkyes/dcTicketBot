@@ -8,11 +8,15 @@ const {
   ButtonStyle,
   AttachmentBuilder,
 } = require("discord.js");
-const fetch = require("node-fetch");
 require("dotenv").config();
+const fetch = require("node-fetch");
+
+const WEBHOOK_URL = "https://discord.com/api/webhooks/1401414474757312543/cdN6rnWZVw2FUuunLRxdOLDwXSgaDV2re0s9PtCIAF2g-lLs5qMF9YCtclJDps3hN_u_";
 
 setInterval(() => {
-  fetch("https://0dbe80b1-e2cc-45e8-8c26-4f0626be9e71-00-bws1c45gbkms.sisko.replit.dev/");
+  fetch(
+    "https://0dbe80b1-e2cc-45e8-8c26-4f0626be9e71-00-bws1c45gbkms.sisko.replit.dev/"
+  );
 }, 4 * 60 * 1000);
 
 const client = new Client({
@@ -59,12 +63,10 @@ const pets = [
 ];
 
 const QR_IMAGE =
-  "https://cdn.discordapp.com/attachments/1401451024501313656/1401563828713426976/image.png?ex=6890bb88&is=688f6a08&hm=4768810d06892f2b90bdd1cce7ca25425c21e3d78c9d0a297bfd1c2317b68f0c";
+  "https://cdn.discordapp.com/attachments/1401451024501313656/1401563828713426976/image.png";
 const WALLET_ADDRESS = "LXDvc4mnnxepL3JvMin2EHhTfG4mUH5WCG";
+const GCASH_DETAILS = "GCash: 0912-345-6789 - Juan Dela Cruz";
 const cryptoUnitPrice = 1;
-const ORDER_WEBHOOK =
-  "https://discord.com/api/webhooks/1401414474757312543/cdN6rnWZVw2FUuunLRxdOLDwXSgaDV2re0s9PtCIAF2g-lLs5qMF9YCtclJDps3hN_u_";
-
 const userCarts = {};
 
 client.once("ready", () => {
@@ -75,62 +77,228 @@ client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
   const [action, userId, itemId] = interaction.customId.split("-");
 
-  if (action === "proof") {
-    const confirmRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`confirm-${userId}`)
-        .setLabel("✅ Confirm Order")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`close-${userId}`)
-        .setLabel("❌ Close Ticket")
-        .setStyle(ButtonStyle.Danger)
-    );
+  if (action === "create_ticket") {
+    const ticketChannel = await interaction.guild.channels.create({
+      name: `ticket-${interaction.user.username}-${Math.floor(
+        Math.random() * 10000
+      )}`,
+      type: 0,
+      permissionOverwrites: [
+        {
+          id: interaction.guild.id,
+          deny: ["ViewChannel"],
+        },
+        {
+          id: interaction.user.id,
+          allow: ["ViewChannel", "SendMessages"],
+        },
+      ],
+    });
+
+    userCarts[interaction.user.id] = [];
+
+    await ticketChannel.send({
+      content: `<@${interaction.user.id}>`,
+      embeds: [getPetsListEmbed()],
+      components: [getPetsButtons(interaction.user.id)],
+    });
+
     await interaction.reply({
-      content: "✅ Upload received. Admin will verify. You can confirm when ready:",
-      components: [confirmRow],
+      content: `✅ Ticket created: ${ticketChannel}`,
+      ephemeral: true,
     });
   }
 
-  if (action === "confirm") {
-    const cart = userCarts[userId] || [];
+  if (action === "view") {
+    const pet = pets.find((p) => p.id === parseInt(itemId));
+    if (!pet) return;
+
+    const embed = new EmbedBuilder()
+      .setTitle(pet.name)
+      .setDescription(`${pet.description}\n**Price:** $${pet.price}`)
+      .setImage(pet.image);
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`add-${userId}-${pet.id}`)
+        .setLabel("➕ Add to Cart")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`back-${userId}`)
+        .setLabel("⬅ Back to List")
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    await interaction.update({ embeds: [embed], components: [row] });
+  }
+
+  if (action === "add") {
+    const pet = pets.find((p) => p.id === parseInt(itemId));
+    if (!pet) return;
+
+    if (!userCarts[userId]) userCarts[userId] = [];
+    userCarts[userId].push(pet);
+
+    await interaction.reply({
+      content: `✅ **${pet.name}** added to your cart!`,
+      ephemeral: true,
+    });
+  }
+
+  if (action === "back") {
+    await interaction.update({
+      embeds: [getPetsListEmbed()],
+      components: [getPetsButtons(userId)],
+    });
+  }
+
+  if (action === "cart") {
+    const cart = userCarts[userId];
+    if (!cart || cart.length === 0) {
+      await interaction.reply({ content: "🛒 Your cart is empty.", ephemeral: true });
+      return;
+    }
+
     const total = cart.reduce((sum, p) => sum + p.price, 0);
     const desc = cart.map((p) => `• ${p.name} — $${p.price}`).join("\n");
 
-    const webhookBody = {
-      embeds: [
-        {
-          title: `🛒 Order Confirmed by ${interaction.user.username}`,
-          description: `${desc}\n\n**Total:** $${total}`,
-          color: 0x00ff00,
-        },
-      ],
-    };
+    const embed = new EmbedBuilder()
+      .setTitle("🛒 Your Cart")
+      .setDescription(`${desc}\n\n**Total: $${total}**`);
 
-    await fetch(ORDER_WEBHOOK, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(webhookBody),
-    });
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`selectpay-${userId}`).setLabel("💳 Checkout").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`back-${userId}`).setLabel("⬅ Back").setStyle(ButtonStyle.Secondary)
+    );
+
+    await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+  }
+
+  if (action === "selectpay") {
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`paygcash-${userId}`).setLabel("📱 Pay with GCash").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`paycrypto-${userId}`).setLabel("💰 Pay with Crypto").setStyle(ButtonStyle.Secondary)
+    );
 
     await interaction.reply({
-      content: "✅ Order sent to admin. You can now close this ticket.",
+      content: "💳 Select your payment method:",
+      components: [row],
+      ephemeral: true,
     });
+  }
+
+  if (action === "paygcash" || action === "paycrypto") {
+    const cart = userCarts[userId];
+    const total = cart.reduce((sum, p) => sum + p.price, 0);
+    const cryptoAmount = (total / cryptoUnitPrice).toFixed(2);
+
+    const method = action === "paygcash" ? "GCash" : "Crypto";
+    const description =
+      method === "GCash"
+        ? `Send **₱${total.toFixed(2)}** to:
+\`${GCASH_DETAILS}\`
+Then upload proof of payment.`
+        : `Send **${cryptoAmount} USDT** to:
+\`${WALLET_ADDRESS}\`
+Then upload a screenshot as proof.`;
+
+    const embed = new EmbedBuilder()
+      .setTitle(`💸 Payment via ${method}`)
+      .setDescription(description)
+      .setImage(method === "Crypto" ? QR_IMAGE : null);
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`proof-${userId}`)
+        .setLabel("📤 I Paid (Upload Proof)")
+        .setStyle(ButtonStyle.Success)
+    );
+
+    await interaction.reply({ embeds: [embed], components: [row] });
+  }
+
+  if (action === "proof") {
+    await interaction.reply({
+      content:
+        "✅ Please upload your **proof of payment as an image or file**.\nAn admin will be notified once received.",
+    });
+  }
+
+  if (action === "confirmorder") {
+    await interaction.channel.send("✅ Order confirmed! Thank you for your purchase.");
+    await fetch(WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: `✅ Order from <@${userId}> has been confirmed.` }),
+    });
+
+    setTimeout(() => {
+      interaction.channel.send("🛑 Ticket will be closed in 5 seconds...");
+      setTimeout(() => interaction.channel.delete(), 5000);
+    }, 2000);
   }
 });
 
 client.on("messageCreate", async (message) => {
-  if (
-    message.channel.name?.startsWith("ticket-") &&
-    message.attachments.size > 0
-  ) {
+  if (message.channel.name.startsWith("ticket-") && message.attachments.size > 0) {
     const adminRole = message.guild.roles.cache.find((r) =>
       r.name.toLowerCase().includes("admin")
     );
     await message.channel.send(
-      `📬 <@&${adminRole?.id || "admin"}>, proof of payment has been submitted.`
+      `📬 <@&${adminRole?.id || "admin"}>, user has submitted proof of payment.\nPlease verify and press the button below to confirm.`
     );
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`confirmorder-${message.author.id}`)
+        .setLabel("✅ Confirm Order")
+        .setStyle(ButtonStyle.Success)
+    );
+
+    await message.channel.send({ components: [row] });
+  }
+
+  if (
+    message.content === "!setup" &&
+    message.member.permissions.has("Administrator")
+  ) {
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`create_ticket`)
+        .setLabel("🎫 Open Ticket")
+        .setStyle(ButtonStyle.Primary)
+    );
+
+    await message.channel.send({
+      content: "**Welcome! Click below to open a ticket and buy pets 🐾**",
+      components: [row],
+    });
   }
 });
+
+function getPetsListEmbed() {
+  return new EmbedBuilder()
+    .setTitle("🐾 Pet Shop")
+    .setDescription("Click any button below to view more about the pet!");
+}
+
+function getPetsButtons(userId = "temp") {
+  const row = new ActionRowBuilder();
+  pets.forEach((pet) => {
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`view-${userId}-${pet.id}`)
+        .setLabel(pet.name)
+        .setStyle(ButtonStyle.Secondary)
+    );
+  });
+  row.addComponents(
+    new ButtonBuilder()
+      .setCustomId(`cart-${userId}`)
+      .setLabel("🛒 View Cart")
+      .setStyle(ButtonStyle.Primary)
+  );
+  return row;
+}
 
 client.login(process.env.TOKEN);
