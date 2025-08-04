@@ -13,11 +13,6 @@ const {
 } = require("discord.js");
 require("dotenv").config();
 
-setInterval(() => {
-  require("node-fetch")(
-    "https://0dbe80b1-e2cc-45e8-8c26-4f0626be9e71-00-bws1c45gbkms.sisko.replit.dev/"
-  );
-}, 4 * 60 * 1000);
 
 const client = new Client({
   intents: [
