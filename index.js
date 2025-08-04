@@ -79,18 +79,64 @@ client.once("ready", () => {
 });
 
 client.on("interactionCreate", async (interaction) => {
-  // Modal submit for user info form
+  if (!interaction.isButton() && !interaction.isModalSubmit()) return;
+
+  const [action, userId, itemId] = interaction.customId.split("-");
+
+  if (["confirm", "reject", "close"].includes(action)) {
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    const isAdmin = member.roles.cache.some((role) => role.name.toLowerCase().includes("admin"));
+    if (!isAdmin) {
+      await interaction.reply({
+        content: "❌ You do not have permission to perform this action.",
+        ephemeral: true,
+      });
+      return;
+    }
+  }
+  if (!interaction.isButton() && !interaction.isModalSubmit()) return;
+
+  const [action, userId, itemId] = interaction.customId.split("-");
+
+  if (["confirm", "reject", "close"].includes(action)) {
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    const isAdmin = member.roles.cache.some((role) => role.name.toLowerCase().includes("admin"));
+    if (!isAdmin) {
+      await interaction.reply({
+        content: "❌ You do not have permission to perform this action.",
+        ephemeral: true,
+      });
+      return;
+    }
+  }
+
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton() && !interaction.isModalSubmit()) return;
+
+  const [action, userId, itemId] = interaction.customId.split("-");
+
+  // Admin-only check for certain actions
+  if (["confirm", "reject", "close"].includes(action)) {
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    const isAdmin = member.roles.cache.some((role) => role.name.toLowerCase().includes("admin"));
+    if (!isAdmin) {
+      await interaction.reply({
+        content: "❌ You do not have permission to perform this action.",
+        ephemeral: true,
+      });
+      return;
+    }
+  }
+
+  // Modal submission: User info form
   if (interaction.isModalSubmit() && interaction.customId.startsWith("userinfo-")) {
-    const userId = interaction.customId.split("-")[1];
     const username = interaction.fields.getTextInputValue("username");
     const pslink = interaction.fields.getTextInputValue("pslink");
     userOrderDetails[userId] = { username, pslink };
 
     const confirmationEmbed = new EmbedBuilder()
       .setTitle("📄 Order Details Submitted")
-      .setDescription(
-        `**In-game Username:** ${username}\n**Private Server Link:** ${pslink}`
-      )
+      .setDescription(`**In-game Username:** ${username}\n**Private Server Link:** ${pslink}`)
       .setColor("Yellow");
 
     await interaction.channel.send({
@@ -98,7 +144,6 @@ client.on("interactionCreate", async (interaction) => {
       embeds: [confirmationEmbed],
     });
 
-    // Prompt for payment method after user info submission
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`paycrypto-${userId}`)
@@ -118,15 +163,10 @@ client.on("interactionCreate", async (interaction) => {
     return;
   }
 
-  if (!interaction.isButton()) return;
-
-  const [action, userId, itemId] = interaction.customId.split("-");
-
+  // Handle other button actions
   if (action === "create_ticket") {
     const ticketChannel = await interaction.guild.channels.create({
-      name: `ticket-${interaction.user.username}-${Math.floor(
-        Math.random() * 10000
-      )}`,
+      name: `ticket-${interaction.user.username}-${Math.floor(Math.random() * 10000)}`,
       type: 0,
       permissionOverwrites: [
         {
@@ -181,8 +221,8 @@ client.on("interactionCreate", async (interaction) => {
   if (action === "add") {
     const pet = pets.find((p) => p.id === parseInt(itemId));
     if (!pet) return;
-
     if (!userCarts[userId]) userCarts[userId] = [];
+
     userCarts[userId].push(pet);
 
     await interaction.reply({
@@ -208,7 +248,6 @@ client.on("interactionCreate", async (interaction) => {
       return;
     }
 
-    // Show modal form to fill username and private server link before payment
     const modal = new ModalBuilder()
       .setCustomId(`userinfo-${userId}`)
       .setTitle("User Info Form");
@@ -217,44 +256,23 @@ client.on("interactionCreate", async (interaction) => {
       .setCustomId("username")
       .setLabel("In-game Username")
       .setStyle(TextInputStyle.Short)
-      .setPlaceholder("Enter your in-game username")
       .setRequired(true);
 
     const pslinkInput = new TextInputBuilder()
       .setCustomId("pslink")
       .setLabel("Private Server Link")
       .setStyle(TextInputStyle.Short)
-      .setPlaceholder("Enter your private server link")
       .setRequired(true);
 
-    const firstRow = new ActionRowBuilder().addComponents(usernameInput);
-    const secondRow = new ActionRowBuilder().addComponents(pslinkInput);
-
-    modal.addComponents(firstRow, secondRow);
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(usernameInput),
+      new ActionRowBuilder().addComponents(pslinkInput)
+    );
 
     await interaction.showModal(modal);
   }
 
-  if (action === "paymethod") {
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`paycrypto-${userId}`)
-        .setLabel("🪙 Pay with Crypto")
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId(`paygcash-${userId}`)
-        .setLabel("📱 Pay with GCash")
-        .setStyle(ButtonStyle.Secondary)
-    );
-
-    await interaction.reply({
-      content: "Please choose your payment method:",
-      components: [row],
-      ephemeral: true,
-    });
-  }
-
-  if (action === "paycrypto") {
+  if (action === "paycrypto" || action === "paygcash") {
     const cart = userCarts[userId];
     if (!cart || cart.length === 0) {
       await interaction.reply({
@@ -265,49 +283,26 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     const total = cart.reduce((sum, p) => sum + p.price, 0);
-    const cryptoAmount = (total / cryptoUnitPrice).toFixed(2);
+    const content =
+      action === "paycrypto"
+        ? {
+            title: "💸 Crypto Payment Info",
+            desc: `Send **${(total / cryptoUnitPrice).toFixed(2)} USDT** to:\n\`${WALLET_ADDRESS}\`\nThen upload a screenshot as proof.`,
+            color: "Green",
+            image: QR_IMAGE,
+          }
+        : {
+            title: "📱 GCash Payment Info",
+            desc: `Send **₱${(total * PHP_RATE).toFixed(2)} PHP** to:\n**Name:** N C\n**Number:** 09624252115\nThen upload a screenshot as proof.`,
+            color: "Blue",
+          };
 
     const embed = new EmbedBuilder()
-      .setTitle("💸 Crypto Payment Info")
-      .setDescription(
-        `Send **${cryptoAmount} USDT** to:\n\`${WALLET_ADDRESS}\`\n\nThen upload a screenshot as proof.`
-      )
-      .setImage(QR_IMAGE)
-      .setColor("Green");
+      .setTitle(content.title)
+      .setDescription(content.desc)
+      .setColor(content.color);
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`proof-${userId}`)
-        .setLabel("📤 I Paid (Upload Proof)")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`close-${userId}`)
-        .setLabel("❌ Close Ticket")
-        .setStyle(ButtonStyle.Danger)
-    );
-
-    await interaction.reply({ embeds: [embed], components: [row] });
-  }
-
-  if (action === "paygcash") {
-    const cart = userCarts[userId];
-    if (!cart || cart.length === 0) {
-      await interaction.reply({
-        content: "🛒 Your cart is empty.",
-        ephemeral: true,
-      });
-      return;
-    }
-
-    const total = cart.reduce((sum, p) => sum + p.price, 0);
-    const phpTotal = (total * PHP_RATE).toFixed(2);
-
-    const embed = new EmbedBuilder()
-      .setTitle("📱 GCash Payment Info")
-      .setDescription(
-        `Send **₱${phpTotal} PHP** to:\n\n**Name:** N C\n**Number:** 09624252115\n\nThen upload a screenshot as proof.`
-      )
-      .setColor("Blue");
+    if (content.image) embed.setImage(content.image);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -358,7 +353,6 @@ client.on("interactionCreate", async (interaction) => {
 
     const total = cart.reduce((sum, p) => sum + p.price, 0);
     const petsList = cart.map((p) => p.name).join(", ");
-
     const status = action === "confirm" ? "✅ Transaction Confirmed" : "❌ Transaction Rejected";
     const color = action === "confirm" ? "Green" : "Red";
 
@@ -376,7 +370,6 @@ client.on("interactionCreate", async (interaction) => {
     await interaction.channel.send({ embeds: [statusEmbed] });
 
     if (action === "confirm") {
-      // Send order info to webhook
       await require("node-fetch")(WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -386,7 +379,6 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
 
-    // Clear user's cart and order details
     userCarts[userId] = [];
     userOrderDetails[userId] = null;
 
@@ -403,13 +395,14 @@ client.on("interactionCreate", async (interaction) => {
     }, 5000);
   }
 });
+  
+});
 
 client.on("messageCreate", async (message) => {
   if (
     message.channel.name?.startsWith("ticket-") &&
     message.attachments.size > 0
   ) {
-    // Auto-forward proof of payment attachment to admin for verification
     const adminRole = message.guild.roles.cache.find((r) =>
       r.name.toLowerCase().includes("admin")
     );
@@ -420,46 +413,5 @@ client.on("messageCreate", async (message) => {
     );
   }
 });
-
-function getPetsListEmbed() {
-  const embed = new EmbedBuilder()
-    .setTitle("🐾 Available Pets")
-    .setDescription(
-      "Click the buttons below to view details and add pets to your cart."
-    )
-    .setColor("Aqua");
-
-  pets.forEach((pet) => {
-    embed.addFields({
-      name: pet.name,
-      value: `$${pet.price.toFixed(2)}`,
-      inline: true,
-    });
-  });
-
-  return embed;
-}
-
-function getPetsButtons(userId) {
-  const row = new ActionRowBuilder();
-
-  pets.forEach((pet) => {
-    row.addComponents(
-      new ButtonBuilder()
-        .setCustomId(`view-${userId}-${pet.id}`)
-        .setLabel(pet.name)
-        .setStyle(ButtonStyle.Primary)
-    );
-  });
-
-  row.addComponents(
-    new ButtonBuilder()
-      .setCustomId(`cart-${userId}`)
-      .setLabel("🛒 View Cart")
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  return row;
-}
 
 client.login(process.env.TOKEN);
